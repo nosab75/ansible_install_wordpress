@@ -1,0 +1,76 @@
+---
+- name: Installer WordPress sur Ubuntu
+  hosts: prod
+  become: true
+  vars_files:
+    - files/secrets/credentials.yml
+  tasks:
+    - name: Installer Apache2
+      ansible.builtin.apt:
+        name: apache2
+        state: present
+
+    - name: Installer PHP et extensions nécessaires
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - php
+        - libapache2-mod-php
+        - php-mysql
+        - php-curl
+        - php-gd
+        - php-mbstring
+        - php-xml
+        - php-xmlrpc
+        - php-soap
+        - php-intl
+        - php-zip
+
+    - name: Installer MariaDB (MySQL)
+      ansible.builtin.apt:
+        name: mariadb-server
+        state: present
+
+    - name: Redémarrer le service Apache pour prendre en compte les changements
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
+      notify: reload apache
+
+    - name: Télécharger WordPress
+      ansible.builtin.get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/wordpress-latest.tar.gz
+        mode: '0644'
+
+    - name: Extraire WordPress
+      ansible.builtin.unarchive:
+        src: /tmp/wordpress-latest.tar.gz
+        dest: /var/www/html
+        remote_src: yes
+        creates: /var/www/html/wordpress
+
+    - name: Configurer les permissions pour WordPress
+      ansible.builtin.file:
+        path: /var/www/html/wordpress
+        owner: www-data
+        group: www-data
+        recurse: yes
+        state: directory
+
+    - name: Copier le fichier de configuration d'exemple de WordPress
+      ansible.builtin.copy:
+        src: /var/www/html/wordpress/wp-config-sample.php
+        dest: /var/www/html/wordpress/wp-config.php
+        remote_src: yes
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      notify: reload apache
+
+  handlers:
+    - name: reload apache
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
